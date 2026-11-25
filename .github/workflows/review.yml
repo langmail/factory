@@ -72,6 +72,10 @@ jobs:
             the PR description, such as "tests pass", are no evidence either
             way.
 
+            This run has no Bash. Read the PR, its diff, its comments and
+            the issues it names with the GitHub MCP tools, and the code in
+            the checkout, which is the PR's head.
+
             Post the overall review into your tracking comment and flag
             specific findings with inline comments. Do not use
             `gh pr comment`. The summary:
@@ -87,19 +91,22 @@ jobs:
               block no merge and justify no further fix round.
             - Ends with `End of review.` on its own line, so the loop can tell
               a review you wrote from a run that only finished.
-          # The inline-comment tool exists only when --allowed-tools names it.
           # In a public repo anyone can comment on a PR, and the comments are
-          # in the prompt, so the review may not write, commit or push, or read
+          # in the prompt, so the review may not write, commit, push or reach
           # the tokens: CLAUDE_CODE_OAUTH_TOKEN in the process environment and
-          # the Claude App token the action writes into .git/config. The
-          # Read denies also cover Grep and Glob. --permission-mode
-          # acceptEdits makes the allow list strict; in the action's default
-          # auto mode, a safety classifier may let a tool outside it run.
+          # the Claude App token the action writes into .git/config. Bash is
+          # denied outright, because a repo's .claude/settings.json may allow
+          # all of it and allow rules are unioned; the deny list wins over
+          # every allow. The Read denies also cover Grep and Glob.
+          # --permission-mode acceptEdits makes the allow list strict: in the
+          # action's default auto mode, a safety classifier may let a tool
+          # outside it run. Naming an mcp__github__ tool starts the action's
+          # GitHub MCP server, and only the read tools listed can be called.
           claude_args: >-
             --model claude-opus-5-5
             --permission-mode acceptEdits
-            --disallowed-tools "Edit,MultiEdit,Write,NotebookEdit,Bash(git push:*),Bash(git commit:*),Read(./.git/**),Read(//proc/**)"
-            --allowed-tools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*)"
+            --disallowed-tools "Bash,Edit,MultiEdit,Write,NotebookEdit,Read(./.git/**),Read(//proc/**)"
+            --allowed-tools "mcp__github_inline_comment__create_inline_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_review_comments,mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__search_issues,mcp__github__search_pull_requests"
 
       - name: Ensure the review was posted
         # Not on cancel: a newer push superseded this run and gets its own.
