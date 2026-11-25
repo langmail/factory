@@ -5,7 +5,8 @@ name: Claude on mention
 # Runs Claude with the request of an owner, member or collaborator who wrote
 # @claude; in a public repo anyone else could otherwise spend the token. The
 # caller grants contents: read, pull-requests: read, issues: read, actions:
-# read and id-token: write.
+# read and id-token: write; Claude itself acts with the Claude App's token,
+# which can push to branches and comment.
 
 on:
   workflow_call:
@@ -48,3 +49,8 @@ jobs:
           # Lets Claude read CI results on PRs.
           additional_permissions: |
             actions: read
+          # Keeps the tokens out of reach: CLAUDE_CODE_OAUTH_TOKEN in the
+          # process environment and the Claude App token the action writes
+          # into .git/config. The Read denies also cover Grep and Glob.
+          claude_args: >-
+            --disallowed-tools "Read(./.git/**),Read(//proc/**)"

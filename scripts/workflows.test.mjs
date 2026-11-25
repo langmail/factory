@@ -58,6 +58,21 @@ test("triage-on-comment denies Bash and allows only reads and GitHub MCP tools",
     "mcp__github__update_issue",
   ]);
   assert.match(triage, /echo "read=,Read\(\/\$target\/\*\*\)"/);
+  // In the action's default auto mode the allow list is not strict.
+  assert.match(triage, /--permission-mode acceptEdits/);
+});
+
+// PR comments from anyone reach the review's prompt, so it may not change the
+// branch or read the tokens, and its allow list must be strict.
+test("the review can't write, push or read the tokens", () => {
+  const review = read(".github/workflows/review.yml");
+  assert.match(review, /--permission-mode acceptEdits/);
+  const denied = [...review.matchAll(/--disallowed-tools "([^"]+)"/g)].flatMap(([, list]) => list.split(","));
+  for (const rule of ["Edit", "Write", "Bash(git push:*)", "Bash(git commit:*)", "Read(./.git/**)", "Read(//proc/**)"]) {
+    assert.ok(denied.includes(rule), `${rule} is not denied`);
+  }
+  const allowed = [...review.matchAll(/--allowed-tools "([^"]+)"/g)].flatMap(([, list]) => list.split(","));
+  assert.ok(!allowed.includes("Write"));
 });
 
 // Consumers run these workflows with their own secrets, so an action may move

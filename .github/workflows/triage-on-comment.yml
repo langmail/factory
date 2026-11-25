@@ -5,7 +5,8 @@ name: Triage on comment
 # a maintainer answers its questions or corrects its brief, instead of waiting
 # for the next scheduled triage run; scheduled routines can't start on
 # comments. The caller grants contents: read, issues: write, pull-requests:
-# read and id-token: write.
+# read and id-token: write; Claude itself acts with the Claude App's token,
+# bound by the tool rules below.
 #
 # Loops: comments from this job come from the Claude bot, and agent or decide
 # comments carry a marker, so neither starts another run.
@@ -89,13 +90,17 @@ jobs:
           # process environment, and the action writes the Claude App token
           # into .git/config even with persist-credentials off. The issue
           # writes go through the action's GitHub MCP server, which naming any
-          # mcp__github__ tool starts with the Claude App token. That server
-          # also has push, merge and create tools, but only the tools listed
-          # here can be called. The action pins the server (github-mcp-server
+          # mcp__github__ tool starts with the Claude App token. That token can
+          # write code, PRs and issues, and the server also has push, merge and
+          # create tools. Only the tools listed here can be called because of
+          # --permission-mode acceptEdits: in the action's default auto mode, a
+          # safety classifier may let a tool outside the list run. The action
+          # pins the server (github-mcp-server
           # v0.17.1 in action v1); a bump that renames these tools would leave
           # the run unable to write. That version cannot add blocked-by links
           # or clear the last label, hence the prompt's rule on size L.
           claude_args: >-
             --model claude-sonnet-5-5
+            --permission-mode acceptEdits
             --disallowed-tools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent,Task,Read(./.git/**),Read(//proc/**)"
             --allowed-tools "Read(./**)${{ steps.sibling.outputs.read }},mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_sub_issues,mcp__github__list_issue_types,mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_pull_requests,mcp__github__add_issue_comment,mcp__github__update_issue"
