@@ -1,0 +1,106 @@
+name: Triage on comment
+
+# Called by a repo's triage-on-comment.yml on issue_comment (created).
+# Re-triages an unassigned issue with the repo's `triage` skill minutes after
+# a maintainer answers its questions or corrects its brief, instead of waiting
+# for the next scheduled triage run; scheduled routines can't start on
+# comments. The caller grants contents: read, issues: write, pull-requests:
+# read and id-token: write; Claude itself acts with the Claude App's token,
+# bound by the tool rules below.
+#
+# Loops: comments from this job come from the Claude bot, and agent or decide
+# comments carry a marker, so neither starts another run.
+
+on:
+  workflow_call:
+    inputs:
+      sibling:
+        description: >-
+          A public repo (owner/name) that issues here are often about, cloned
+          at main next to the checkout, at ../name, for the run to read.
+        type: string
+        default: ""
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+
+jobs:
+  triage:
+    name: Triage
+    # At job level, so the skipped runs of bot comments never take the slot
+    # of a waiting maintainer comment.
+    concurrency:
+      group: triage-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      !contains(github.event.comment.body, '<!-- agent:') &&
+      !contains(github.event.comment.body, '<!-- decide -->') &&
+      github.event.issue.assignee == null &&
+      (contains(github.event.issue.labels.*.name, 'needs-info') ||
+       contains(github.event.issue.labels.*.name, 'needs-decision') ||
+       contains(github.event.issue.labels.*.name, 'ready-for-agent') ||
+       contains(github.event.issue.labels.*.name, 'ready-for-human'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Clone the sibling repo
+        id: sibling
+        env:
+          SIBLING: ${{ inputs.sibling }}
+        run: |
+          if [ -z "$SIBLING" ]; then exit 0; fi
+          target="$(dirname "$GITHUB_WORKSPACE")/${SIBLING#*/}"
+          git clone --quiet --depth 1 "https://github.com/$SIBLING.git" "$target"
+          echo "read=,Read(/$target/**)" >> "$GITHUB_OUTPUT"
+
+      # On @v1, not a commit: its releases bring the Claude Code version that
+      # newer models need.
+      - name: Triage the issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            A maintainer just commented on issue #${{ github.event.issue.number }} in ${{ github.repository }}.
+            Read `.agents/skills/triage/SKILL.md` and follow it for this issue only.
+            Your only writes are the labels, issue type, comments and closing (duplicate, not planned or completed) that the skill describes.
+            This run has no Bash, so no `gh api`: do every read and write the skill names through the GitHub MCP tools instead, mapped from the skill's calls like this.
+            `issues/<N>` with `mcp__github__get_issue`, `issues/<N>/comments` with `mcp__github__get_issue_comments`, `issues/<N>/sub_issues` with `mcp__github__list_sub_issues`, `search/issues` with `mcp__github__search_issues`; read pull requests with the pull request tools.
+            Post a comment (`POST issues/<N>/comments`) with `mcp__github__add_issue_comment`.
+            Do the label calls (`POST issues/<N>/labels`, `DELETE issues/<N>/labels/<label>`), the type (`-f type=…`, names from `mcp__github__list_issue_types`) and the close (`state: closed` with `state_reason`; for a duplicate also `duplicate_of`) with `mcp__github__update_issue`.
+            Its `labels` replace the whole list, so send the issue's current labels plus or minus the one the skill adds or removes; an empty list is ignored.
+            The skill's `dependencies/blocked_by` calls have no tool here.
+            If the issue is size L, change nothing on it, no labels and no comment: these tools cannot add the blocked-by links between slices or clear the last label. The maintainer's comment stays the newest reply, so the next scheduled triage run splits it.
+            This is the triage-on-comment workflow the skill names: you cannot start subagents, file issues or add or remove blocked-by links. An issue that needs a design pass, whose brief would defer work no open issue covers, whose criterion waits for another issue, or where a reply waives such a wait, gets the same treatment as size L.
+          # Bash is denied outright, so issue text cannot run a shell or reach
+          # the network. A repo's .claude/settings.json may allow Bash, and
+          # allow rules are unioned, so a narrow Bash(gh ...) allow would not
+          # bind; the deny list wins over every allow. Reads are allowed in the
+          # checkout and the sibling clone only, and the Read denies (which
+          # Claude Code also applies to Grep and Glob) keep the tokens out of
+          # reach of a read-then-comment path: CLAUDE_CODE_OAUTH_TOKEN is in the
+          # process environment, and the action writes the Claude App token
+          # into .git/config even with persist-credentials off. The issue
+          # writes go through the action's GitHub MCP server, which naming any
+          # mcp__github__ tool starts with the Claude App token. That token can
+          # write code, PRs and issues, and the server also has push, merge and
+          # create tools. Only the tools listed here can be called because of
+          # --permission-mode acceptEdits: in the action's default auto mode, a
+          # safety classifier may let a tool outside the list run. The action
+          # pins the server (github-mcp-server
+          # v0.17.1 in action v1); a bump that renames these tools would leave
+          # the run unable to write. That version cannot add blocked-by links
+          # or clear the last label, hence the prompt's rule on size L.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --permission-mode acceptEdits
+            --disallowed-tools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent,Task,Read(./.git/**),Read(//proc/**)"
+            --allowed-tools "Read(./**)${{ steps.sibling.outputs.read }},mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_sub_issues,mcp__github__list_issue_types,mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_pull_requests,mcp__github__add_issue_comment,mcp__github__update_issue"
