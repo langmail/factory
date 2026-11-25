@@ -6,7 +6,8 @@ The skills, workflow and review rules that every Langmail software repo shares. 
 
 - Every shared skill lives in `skills/<name>/`, our own and third-party ones alike, so the PR here shows the text every repo will run. A third-party skill keeps its upstream `LICENSE`, and `factory.json` (`upstream`) records the commit it was copied from: to update it, copy the newer upstream folder in.
 - A merge to `main` changes nothing downstream. A tag `vX.Y.Z` on `main` starts `.github/workflows/sync.yml`, which opens a PR in each consumer and merges it once all its checks are green, with no further review. So the PR here is the only review a change gets: review it for every consumer.
-- Consumers get the skills in `.agents/skills/<name>/`, with a `.claude/skills/<name>` symlink, pinned by commit in their `skills-lock.json`. Their CI calls `.github/workflows/skills-check.yml`, which fails on any hand edit to a copy.
+- Consumers get the skills in `.agents/skills/<name>/`, with a `.claude/skills/<name>` symlink, pinned by commit in their `skills-lock.json`, and `labels.yml` as `.github/labels.yml`. Their CI calls `.github/workflows/skills-check.yml`, which fails on any hand edit to a copy.
+- Consumers call the reusable workflows in `.github/workflows/` from thin caller files, pinned to the release commit, which the sync moves: `review.yml` (Claude review), `claude.yml` (@claude), `triage-on-comment.yml`, `labels.yml` (label sync) and `skills-check.yml`. The review format every repo's PR review loop reads is in `review.yml`; a repo's `REVIEW.md` says only what matters in that repo.
 - A skill a consumer should lose goes to `retired` in `factory.json`, and the next sync removes it.
 - We copy skills into each repo, and use no Claude Code plugin, because cloud sessions and routines load only what is committed in the repo they clone.
 

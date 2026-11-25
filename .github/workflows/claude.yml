@@ -1,0 +1,50 @@
+name: Claude on mention
+
+# Called by each repo's claude.yml on issue_comment, pull_request_review_comment
+# and pull_request_review (created or submitted) and issues (opened, assigned).
+# Runs Claude with the request of an owner, member or collaborator who wrote
+# @claude; in a public repo anyone else could otherwise spend the token. The
+# caller grants contents: read, pull-requests: read, issues: read, actions:
+# read and id-token: write.
+
+on:
+  workflow_call:
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+
+jobs:
+  claude:
+    name: Claude
+    if: >-
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' &&
+       contains(github.event.review.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' &&
+       (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
+    runs-on: ubuntu-latest
+    # A mention can ask for real work, but not for the 6-hour default that a
+    # wedged session would otherwise cost.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # On @v1, not a commit: its releases bring the Claude Code version that
+      # newer models need.
+      - name: Run Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Lets Claude read CI results on PRs.
+          additional_permissions: |
+            actions: read

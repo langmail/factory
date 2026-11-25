@@ -1,0 +1,91 @@
+name: Labels
+
+# Called by each repo's factory.yml on push to main: syncs the repo's
+# .github/labels.yml, the factory's labels.yml as the sync copied it, to
+# GitHub. Creates or updates each label and retires the retired ones as that
+# file's header says. Labels the file doesn't name, such as Dependabot's or
+# semantic-release's, stay. The caller grants contents: read, issues: write
+# and pull-requests: read.
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Print the changes without making them.
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    name: Sync labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sync-labels
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/labels.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Sync .github/labels.yml to GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          config=$(yq --output-format=json .github/labels.yml)
+          run() {
+            if [ "$DRY_RUN" = true ]; then echo "[dry run] $1"; return; fi
+            echo "$1"
+            gh api --silent "${@:2}"
+          }
+          uri() { jq --raw-output --null-input --arg s "$1" '$s | @uri'; }
+          remote=$(gh api --paginate "repos/$GITHUB_REPOSITORY/labels?per_page=100" --jq '.[] | {name, color, description}' | jq --slurp .)
+          # GitHub label names are unique regardless of case.
+          remote_label() { jq --compact-output --arg n "$1" 'map(select(.name | ascii_downcase == ($n | ascii_downcase))) | first // empty' <<<"$remote"; }
+
+          while read -r label; do
+            name=$(jq --raw-output .name <<<"$label")
+            color=$(jq --raw-output .color <<<"$label")
+            description=$(jq --raw-output .description <<<"$label")
+            current=$(remote_label "$name")
+            if [ -z "$current" ]; then
+              run "create $name" "repos/$GITHUB_REPOSITORY/labels" -f name="$name" -f color="$color" -f description="$description"
+            elif [ "$(jq --compact-output '[.name, .color, .description]' <<<"$current")" != "$(jq --compact-output '[.name, .color, .description]' <<<"$label")" ]; then
+              run "update $name" -X PATCH "repos/$GITHUB_REPOSITORY/labels/$(uri "$(jq --raw-output .name <<<"$current")")" \
+                -f new_name="$name" -f color="$color" -f description="$description"
+            fi
+          done < <(jq --compact-output '.labels[]' <<<"$config")
+
+          while read -r label; do
+            name=$(jq --raw-output .name <<<"$label")
+            type=$(jq --raw-output '.type // empty' <<<"$label")
+            current=$(remote_label "$name")
+            [ -n "$current" ] || continue
+            name=$(jq --raw-output .name <<<"$current")
+            encoded=$(uri "$name")
+            if [ -n "$type" ]; then
+              while read -r issue; do
+                number=$(jq --raw-output .number <<<"$issue")
+                if [ "$(jq --raw-output '.type.name // empty' <<<"$issue")" = "" ]; then
+                  run "type #$number $type" -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -f type="$type"
+                fi
+                run "unlabel #$number $name" -X DELETE "repos/$GITHUB_REPOSITORY/issues/$number/labels/$encoded"
+              done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" \
+                --jq '.[] | select(.pull_request | not) | {number, type}')
+            fi
+            # Deleting a label strips it from every issue and PR, and
+            # re-creating it doesn't bring that back, so a label still on one
+            # stays until someone moves them. With a type, only PRs can still
+            # carry it.
+            filter='.[]'
+            [ -z "$type" ] || filter='.[] | select(.pull_request)'
+            carriers=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" --jq "$filter | .number" | jq --slurp length)
+            if [ "$carriers" -gt 0 ]; then
+              echo "::warning::Keeping retired label $name: still on $carriers issue(s) or PR(s)."
+            else
+              run "delete $name" -X DELETE "repos/$GITHUB_REPOSITORY/labels/$encoded"
+            fi
+          done < <(jq --compact-output '.retired[]' <<<"$config")

@@ -1,7 +1,8 @@
-name: Shared skills
+name: Factory copies
 
-# Called by every consumer: fails when a skill in skills-lock.json differs
-# from its pinned commit. See AGENTS.md (How a change reaches the repos).
+# Called by every consumer: fails when a skill in skills-lock.json, or the
+# .github/labels.yml copy, differs from its pinned commit. See AGENTS.md (How
+# a change reaches the repos).
 
 on:
   workflow_call:
@@ -11,7 +12,7 @@ permissions:
 
 jobs:
   check:
-    name: Copies match skills-lock.json
+    name: Copies match their pins
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,6 +28,13 @@ jobs:
             rm -rf ".agents/skills/$name" ".claude/skills/$name"
           done
           npx --yes skills@1.9.0 experimental_install --frozen-lockfile --agent claude-code --agent codex
+      - name: Compare the labels with the pinned factory commit
+        run: |
+          commit=$(jq --raw-output '[.skills[] | select(.source == "langmail/factory") | .commit] | unique
+            | if length == 1 then .[0] else error("skills-lock.json pins langmail/factory at \(length) commits") end' skills-lock.json)
+          curl --fail --silent --show-error "https://raw.githubusercontent.com/langmail/factory/$commit/labels.yml" \
+            | diff --unified - .github/labels.yml \
+            || { echo "::error::.github/labels.yml differs from langmail/factory $commit. Change labels in langmail/factory and take the sync PR."; exit 1; }
       - name: Fail on any difference
         run: |
           if [ -n "$(git status --porcelain -- .agents .claude skills-lock.json)" ]; then

@@ -113,13 +113,13 @@ jobs:
           fi
           head=$(git rev-parse HEAD)
 
-          # Every check run on the head, once the skills check is among them
+          # Every check run on the head, once the factory check is among them
           # and all have finished: green when each succeeded or was skipped.
           sleep 120
           for _ in $(seq 1 86); do
             state=$(gh api "repos/$REPO/commits/$head/check-runs?per_page=100" --jq '
               .check_runs as $runs
-              | if ($runs | map(select(.name | endswith("Copies match skills-lock.json"))) | length) == 0 then "waiting"
+              | if ($runs | map(select(.name | endswith("Copies match their pins"))) | length) == 0 then "waiting"
                 elif ($runs | any(.status != "completed")) then "waiting"
                 elif ($runs | all(.conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral")) then "green"
                 else "red" end')
