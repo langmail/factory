@@ -95,9 +95,10 @@ the shape of the tools themselves. Sources for every claim:
 
 ## 2. Repository conventions
 
-The repository's own conventions for tools (how a tool registers, its
-annotations, error texts, how names resolve, shared input shapes, server
-instructions) are where its `AGENTS.md` says. Read them before designing;
+The conventions of the repository that holds the tools (how a tool
+registers, its annotations, error texts, how names resolve, shared input
+shapes, server instructions) are where its `AGENTS.md` says; for a server
+in a clone next to this repository, read that clone's. Read them before designing;
 where it names none, follow the existing tools.
 
 ## 3. Decision procedure for a new or changed tool
@@ -156,7 +157,7 @@ approvals users saved for the old name.
 | "Splitting would double the tool surface for one branch" | Two clearly-bounded tools select better than one ambiguous one; count is not the cost, overlap is. |
 | "Take the id — it mirrors `ruleId` → `list_mail_rules`" | Rules have no name; folders do, and a resolver already exists. Ids force a list-then-act round trip. |
 | "Batch can be a follow-up / open question" | Users act on "these". A single-item tool ships an N-call loop on day one. Batch now, cap it. |
-| "Move to Trash to discard" (from an `ACCOUNT_WRITE` move) | Then the move tool is destructive and mislabelled. Reject Trash and name `trash_emails`. |
+| "Move to Trash to discard" (from a non-destructive move) | Then the move tool is destructive and mislabelled. Reject Trash and name `trash_emails`. |
 | "Create the folder if missing, it's convenient" | A typo becomes a new folder. Strict resolve, list what exists. |
 | "The description is fine, the schema explains it" | Descriptions decide selection. Four sentences minimum, with neighbours. |
 | "Mark read while we're moving, saves a call" | The user did not say "read". Orthogonal concerns, separate tools. |

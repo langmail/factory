@@ -45,7 +45,7 @@ test("every Factory section entry WORKFLOW.md or a skill refers to is in its lis
   const listed = [...list.matchAll(/^- \*\*([^*]+):\*\*/gm)].map(([, name]) => name);
   assert.ok(listed.length > 0);
   for (const path of shared) {
-    for (const [, name] of read(path).matchAll(/Factory section's\s+\*\*([^*]+)\*\*/g)) {
+    for (const [, name] of read(path).matchAll(/Factory\s+section['’]s\s+\*\*([^*]+)\*\*/g)) {
       assert.ok(listed.includes(name), `${path}: ${name} is not in the Factory section list`);
     }
   }
@@ -56,7 +56,7 @@ test("every Factory section entry WORKFLOW.md or a skill refers to is in its lis
 // gh api REST call (scheduled-agent-design skill).
 test("WORKFLOW.md and the skills name no gh issue, gh pr, gh search or GraphQL command", () => {
   const refused =
-    /\bgh(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+(?:(?:issue|pr)\s+\w+|search\s+\w+|api\s+graphql)\b/g;
+    /\bgh(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+(?:(?:issue|pr)\s+\w+|search\s+\w+|api(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+graphql)\b/g;
   for (const path of shared) assert.deepEqual({ path, named: read(path).match(refused) ?? [] }, { path, named: [] });
 });
 
@@ -64,7 +64,7 @@ test("WORKFLOW.md and the skills name no gh issue, gh pr, gh search or GraphQL c
 test("every label a skill names exists, and none is retired", () => {
   for (const path of skills) {
     const text = read(path);
-    for (const [, name] of text.matchAll(/`((?:needs|ready)-[a-z-]+|urgent)`/g)) {
+    for (const [, name] of text.matchAll(/\b((?:needs|ready)-[a-z]+(?:-[a-z]+)*)\b/g)) {
       assert.ok(names.includes(name), `${path} names ${name}, which is not in labels.yml`);
     }
     for (const name of retired) assert.ok(!text.includes(`\`${name}\``), `${path} names retired ${name}`);

@@ -58,7 +58,9 @@ from its repository, so what it does is versioned and reviewed like code.
   included (`gh api -X GET search/issues -f q='…'`). A skill a routine reads
   therefore writes each GitHub step as the exact `gh api` call that does it,
   at the step. The same calls work in a local CLI.
-- **Auto-fix pull requests** is on for every routine: Claude watches CI and
-  review comments on the PRs a routine opens and pushes fixes. Those fixes
-  follow the PR review loop in `WORKFLOW.md`, its limits included. Turn it on
-  when you create a routine (`autofix_on_pr_create` in the API).
+- **Auto-fix pull requests** is on for every routine of a private
+  repository: Claude watches CI and review comments on the PRs a routine
+  opens and pushes fixes. Those fixes follow the PR review loop in
+  `WORKFLOW.md`, its limits included. Turn it on when you create a routine
+  (`autofix_on_pr_create` in the API). In a public repository anyone can
+  comment on those PRs, so it stays off there.
