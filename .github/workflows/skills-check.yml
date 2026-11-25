@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 24
       - name: Reinstall every pinned skill
-        run: npx --yes skills@1.9.0 experimental_install --frozen-lockfile --force --agent claude-code
+        run: npx --yes skills@1.9.0 experimental_install --frozen-lockfile --force --agent claude-code --agent codex
       - name: Fail on any difference
         run: |
           git add --intent-to-add --all -- .agents .claude

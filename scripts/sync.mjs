@@ -23,7 +23,7 @@ const skills = (...args) =>
 
 // A skill without a source lives in this repo and is pinned to the release.
 for (const [name, { source = "langmail/factory", ref = version }] of Object.entries(factory.skills)) {
-  skills("add", `${source}#${ref}`, "--skill", name, "--agent", "claude-code", "--yes");
+  skills("add", `${source}#${ref}`, "--skill", name, "--agent", "claude-code", "--agent", "codex", "--yes");
 }
 
 const lockPath = join(target, "skills-lock.json");
