@@ -4,8 +4,9 @@ name: Labels
 # .github/labels.yml, the factory's labels.yml as the sync copied it, to
 # GitHub. Creates or updates each label and retires the retired ones as that
 # file's header says. Labels the file doesn't name, such as Dependabot's or
-# semantic-release's, stay. The caller grants contents: read, issues: write
-# and pull-requests: read.
+# semantic-release's, stay. The caller grants contents: write, because
+# GitHub drops issue type changes from tokens without push access, issues:
+# write and pull-requests: read.
 
 on:
   workflow_call:
@@ -67,24 +68,30 @@ jobs:
             name=$(jq --raw-output .name <<<"$current")
             encoded=$(uri "$name")
             if [ -n "$type" ]; then
+              # Read the whole list before changing it, so pages don't shift
+              # and a failed read stops the job.
+              issues=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" \
+                --jq '.[] | select(.pull_request | not) | {number, type: .type.name}')
               while read -r issue; do
+                [ -n "$issue" ] || continue
                 number=$(jq --raw-output .number <<<"$issue")
-                if [ "$(jq --raw-output '.type.name // empty' <<<"$issue")" = "" ]; then
+                if [ "$(jq --raw-output '.type // empty' <<<"$issue")" = "" ]; then
                   run "type #$number $type" -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -f type="$type"
+                  # GitHub drops a type change it doesn't allow without an error.
+                  if [ "$DRY_RUN" != true ] && [ "$(gh api "repos/$GITHUB_REPOSITORY/issues/$number" --jq '.type.name // empty')" != "$type" ]; then
+                    echo "::error::#$number did not get the type $type, so it keeps $name."
+                    exit 1
+                  fi
                 fi
                 run "unlabel #$number $name" -X DELETE "repos/$GITHUB_REPOSITORY/issues/$number/labels/$encoded"
-              done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" \
-                --jq '.[] | select(.pull_request | not) | {number, type}')
+              done <<<"$issues"
             fi
             # Deleting a label strips it from every issue and PR, and
             # re-creating it doesn't bring that back, so a label still on one
-            # stays until someone moves them. With a type, only PRs can still
-            # carry it.
-            filter='.[]'
-            [ -z "$type" ] || filter='.[] | select(.pull_request)'
-            carriers=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" --jq "$filter | .number" | jq --slurp length)
-            if [ "$carriers" -gt 0 ]; then
-              echo "::warning::Keeping retired label $name: still on $carriers issue(s) or PR(s)."
+            # stays until someone moves them.
+            carriers=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?labels=$encoded&state=all&per_page=100" --jq '.[].number')
+            if [ -n "$carriers" ] && [ "$DRY_RUN" != true -o -z "$type" ]; then
+              echo "::warning::Keeping retired label $name: still on $(wc -l <<<"$carriers" | tr -d ' ') issue(s) or PR(s)."
             else
               run "delete $name" -X DELETE "repos/$GITHUB_REPOSITORY/labels/$encoded"
             fi

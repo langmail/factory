@@ -117,7 +117,9 @@ jobs:
           workflow=${workflow%%@*}
           default_branch=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
           base_blob=$(gh api "repos/$GITHUB_REPOSITORY/contents/$workflow?ref=$default_branch" --jq .sha 2>/dev/null || true)
-          head_blob=$(git hash-object "$workflow" 2>/dev/null || true)
+          # The action checks out the PR head; GITHUB_SHA is the merge commit
+          # the action validated.
+          head_blob=$(git rev-parse "$GITHUB_SHA:$workflow" 2>/dev/null || true)
           if [ "$base_blob" != "$head_blob" ]; then
             echo "::warning::This PR changes $workflow, so the review action skipped itself."
             exit 0

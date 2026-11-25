@@ -30,6 +30,7 @@ jobs:
           npx --yes skills@1.9.0 experimental_install --frozen-lockfile --agent claude-code --agent codex
       - name: Compare the labels with the pinned factory commit
         run: |
+          set -o pipefail
           commit=$(jq --raw-output '[.skills[] | select(.source == "langmail/factory") | .commit] | unique
             | if length == 1 then .[0] else error("skills-lock.json pins langmail/factory at \(length) commits") end' skills-lock.json)
           curl --fail --silent --show-error "https://raw.githubusercontent.com/langmail/factory/$commit/labels.yml" \
