@@ -101,7 +101,9 @@ jobs:
           # --permission-mode acceptEdits makes the allow list strict: in the
           # action's default auto mode, a safety classifier may let a tool
           # outside it run. Naming an mcp__github__ tool starts the action's
-          # GitHub MCP server, and only the read tools listed can be called.
+          # GitHub MCP server, which has write tools too: only the read tools
+          # listed can be called as long as no repo's .claude/settings.json
+          # allows an mcp__github__ tool.
           claude_args: >-
             --model claude-opus-5-5
             --permission-mode acceptEdits
