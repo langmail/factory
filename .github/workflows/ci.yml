@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Nothing private in shared files
+        run: scripts/leak-check.sh
+      - name: Every shared skill installs into a fresh repo
+        env:
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          git init --quiet "$RUNNER_TEMP/consumer"
+          node scripts/sync.mjs "$RUNNER_TEMP/consumer" "$COMMIT"
+          cd "$RUNNER_TEMP/consumer"
+          for name in $(jq --raw-output '.skills | keys[]' "$GITHUB_WORKSPACE/factory.json"); do
+            test -f ".agents/skills/$name/SKILL.md"
+            test "$(readlink ".claude/skills/$name")" = "../../.agents/skills/$name"
+          done

@@ -1,0 +1,83 @@
+name: Sync
+
+# On every release tag, opens a pull request in each consumer repo that brings
+# it to this version (scripts/sync.mjs), and turns on auto-merge: the factory
+# PR is where the change was reviewed, so the sync PR merges once its CI is
+# green. It runs as the langmail-factory-sync GitHub App, because PRs opened
+# with GITHUB_TOKEN start no CI, and that token cannot write to other repos.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to sync to
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  consumers:
+    runs-on: ubuntu-latest
+    outputs:
+      repos: ${{ steps.list.outputs.repos }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: list
+        run: echo "repos=$(jq --compact-output .consumers factory.json)" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: consumers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.consumers.outputs.repos) }}
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      REPO: langmail/${{ matrix.repo }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.FACTORY_SYNC_APP_ID }}
+          private-key: ${{ secrets.FACTORY_SYNC_PRIVATE_KEY }}
+          owner: langmail
+          repositories: ${{ matrix.repo }}
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.VERSION }}
+          path: factory
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ env.REPO }}
+          token: ${{ steps.app.outputs.token }}
+          path: repo
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node factory/scripts/sync.mjs repo "$VERSION"
+      - name: Open the sync PR
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT: ${{ steps.app.outputs.app-slug }}[bot]
+        run: |
+          git add --all
+          if git diff --cached --quiet; then
+            echo "$REPO is already at $VERSION"
+            exit 0
+          fi
+          bot_id=$(gh api "users/$BOT" --jq .id)
+          git config user.name "$BOT"
+          git config user.email "$bot_id+$BOT@users.noreply.github.com"
+          branch="chore/factory-$VERSION"
+          git switch --create "$branch"
+          git commit --message "chore(factory): sync to $VERSION"
+          git push origin "$branch"
+          number=$(gh api "repos/$REPO/pulls" --jq .number \
+            -f title="chore(factory): sync to $VERSION" -f head="$branch" -f base=main \
+            -f body="Brings the shared skills and factory workflows to [langmail/factory $VERSION](https://github.com/langmail/factory/tree/$VERSION). Merges itself once CI is green; the change was reviewed in langmail/factory.")
+          gh pr merge "$number" --repo "$REPO" --auto --squash

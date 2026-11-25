@@ -1,0 +1,11 @@
+{
+  "consumers": ["platform", "caldav-mcp", "carddav-mcp", "imap-mcp", "langmail-mcp"],
+  "skills": {
+    "handover-prompt": {},
+    "scion-like-git": { "source": "unvibe-org/skills", "ref": "9bb7c87582418afb59447a4ececda3355fa89f8a" },
+    "review-agents-md": { "source": "unvibe-org/skills", "ref": "9bb7c87582418afb59447a4ececda3355fa89f8a" },
+    "grilling": { "source": "mattpocock/skills", "ref": "d65391149dbb5fe76478e76fa8d5122b2aa5a70e" },
+    "grill-me": { "source": "mattpocock/skills", "ref": "d65391149dbb5fe76478e76fa8d5122b2aa5a70e" }
+  },
+  "retired": ["better-agents-md"]
+}
