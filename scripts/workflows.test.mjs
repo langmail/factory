@@ -1,4 +1,4 @@
-// Checks the shared labels and the reusable workflows that every consumer
+// Checks the shared labels, WORKFLOW.md and the reusable workflows that every consumer
 // calls. Run with `node --test scripts/*.test.mjs`.
 
 import assert from "node:assert/strict";
@@ -21,6 +21,36 @@ test("labels have unique names and six-digit hex colours, and none is also retir
   assert.equal(new Set(names).size, names.length);
   for (const { color } of labels) assert.match(color, /^[0-9a-f]{6}$/);
   for (const name of retired) assert.ok(!names.includes(name), `${name} is both a label and retired`);
+});
+
+const workflow = read("WORKFLOW.md");
+
+test("WORKFLOW.md documents every label and names no other", () => {
+  for (const name of names) assert.ok(workflow.includes(`\`${name}\``), `${name} is not in WORKFLOW.md`);
+  for (const [, name] of workflow.matchAll(/`((?:needs|ready)-[a-z-]+|urgent)`/g)) {
+    assert.ok(names.includes(name), `WORKFLOW.md names ${name}, which is not in labels.yml`);
+  }
+  for (const name of retired) assert.ok(!workflow.includes(`\`${name}\``), `WORKFLOW.md names retired ${name}`);
+});
+
+// skills-check.yml reads the entries from this list and fails a consumer
+// whose AGENTS.md lacks one, so every entry the workflow refers to is listed.
+test("every Factory section entry WORKFLOW.md refers to is in its list", () => {
+  const [, after] = workflow.split(/^## The Factory section$/m);
+  const [list] = after.split(/^## /m);
+  const listed = [...list.matchAll(/^- \*\*([^*]+):\*\*/gm)].map(([, name]) => name);
+  assert.ok(listed.length > 0);
+  for (const [, name] of workflow.matchAll(/Factory section's\s+\*\*([^*]+)\*\*/g)) {
+    assert.ok(listed.includes(name), `${name} is not in the Factory section list`);
+  }
+});
+
+// Cloud sessions refuse GitHub GraphQL, which gh issue, gh pr and gh search
+// go through, so the workflow writes every GitHub step as a gh api REST call.
+test("WORKFLOW.md names no gh issue, gh pr, gh search or GraphQL command", () => {
+  const refused =
+    /\bgh(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+(?:(?:issue|pr)\s+\w+|search\s+\w+|api\s+graphql)\b/g;
+  assert.deepEqual(workflow.match(refused) ?? [], []);
 });
 
 const triage = read(".github/workflows/triage-on-comment.yml");

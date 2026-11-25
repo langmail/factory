@@ -56,9 +56,9 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
 
             Review this pull request for bugs and incorrect behavior. Use the
-            repository's AGENTS.md for its conventions and its REVIEW.md for
-            what counts as Important there, what not to report and what to
-            always check.
+            repository's AGENTS.md and WORKFLOW.md for its conventions and
+            rules, and its REVIEW.md for what counts as Important there, what
+            not to report and what to always check.
 
             Important means a finding that breaks behavior, loses or leaks
             data, or blocks a rollback. Style, naming and refactoring
