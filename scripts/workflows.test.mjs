@@ -33,24 +33,42 @@ test("WORKFLOW.md documents every label and names no other", () => {
   for (const name of retired) assert.ok(!workflow.includes(`\`${name}\``), `WORKFLOW.md names retired ${name}`);
 });
 
+const skills = readdirSync(new URL("../skills/", import.meta.url)).map((name) => `skills/${name}/SKILL.md`);
+const shared = ["WORKFLOW.md", ...skills];
+
 // skills-check.yml reads the entries from this list and fails a consumer
-// whose AGENTS.md lacks one, so every entry the workflow refers to is listed.
-test("every Factory section entry WORKFLOW.md refers to is in its list", () => {
+// whose AGENTS.md lacks one, so every entry the workflow or a skill refers to
+// is listed.
+test("every Factory section entry WORKFLOW.md or a skill refers to is in its list", () => {
   const [, after] = workflow.split(/^## The Factory section$/m);
   const [list] = after.split(/^## /m);
   const listed = [...list.matchAll(/^- \*\*([^*]+):\*\*/gm)].map(([, name]) => name);
   assert.ok(listed.length > 0);
-  for (const [, name] of workflow.matchAll(/Factory section's\s+\*\*([^*]+)\*\*/g)) {
-    assert.ok(listed.includes(name), `${name} is not in the Factory section list`);
+  for (const path of shared) {
+    for (const [, name] of read(path).matchAll(/Factory\s+section['’]s\s+\*\*([^*]+)\*\*/g)) {
+      assert.ok(listed.includes(name), `${path}: ${name} is not in the Factory section list`);
+    }
   }
 });
 
 // Cloud sessions refuse GitHub GraphQL, which gh issue, gh pr and gh search
-// go through, so the workflow writes every GitHub step as a gh api REST call.
-test("WORKFLOW.md names no gh issue, gh pr, gh search or GraphQL command", () => {
+// go through, so the workflow and the skills write every GitHub step as a
+// gh api REST call (scheduled-agent-design skill).
+test("WORKFLOW.md and the skills name no gh issue, gh pr, gh search or GraphQL command", () => {
   const refused =
-    /\bgh(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+(?:(?:issue|pr)\s+\w+|search\s+\w+|api\s+graphql)\b/g;
-  assert.deepEqual(workflow.match(refused) ?? [], []);
+    /\bgh(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+(?:(?:issue|pr)\s+\w+|search\s+\w+|api(?:\s+-{1,2}[\w-]+(?:[\s=][^\s-]\S*)?)*\s+graphql)\b/g;
+  for (const path of shared) assert.deepEqual({ path, named: read(path).match(refused) ?? [] }, { path, named: [] });
+});
+
+// The skills name the workflow labels too.
+test("every label a skill names exists, and none is retired", () => {
+  for (const path of skills) {
+    const text = read(path);
+    for (const [, name] of text.matchAll(/\b((?:needs|ready)-[a-z]+(?:-[a-z]+)*)\b/g)) {
+      assert.ok(names.includes(name), `${path} names ${name}, which is not in labels.yml`);
+    }
+    for (const name of retired) assert.ok(!text.includes(`\`${name}\``), `${path} names retired ${name}`);
+  }
 });
 
 const triage = read(".github/workflows/triage-on-comment.yml");

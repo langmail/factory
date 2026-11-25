@@ -11,6 +11,7 @@ The skills, workflow and review rules that every Langmail software repo shares. 
 - Keep `WORKFLOW.md` as a markdown formatter writes it (`_emphasis_`, padded tables): a consumer's pre-commit formatter rewrites the copy otherwise, and the check then fails.
 - Consumers call the reusable workflows in `.github/workflows/` from thin caller files, pinned to the release commit, which the sync moves: `review.yml` (Claude review), `claude.yml` (@claude), `triage-on-comment.yml`, `labels.yml` (label sync) and `skills-check.yml`. The review format every repo's PR review loop reads is in `review.yml`; a repo's `REVIEW.md` says only what matters in that repo.
 - A skill a consumer should lose goes to `retired` in `factory.json`, and the next sync removes it.
+- The sync replaces a shared skill's whole folder in each consumer. What belongs to one repo, such as the record of a routine that runs a shared skill, lives outside it (`.agents/routines/`, `scheduled-agent-design` skill).
 - We copy skills into each repo, and use no Claude Code plugin, because cloud sessions and routines load only what is committed in the repo they clone.
 
 ## Rules
