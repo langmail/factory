@@ -39,4 +39,5 @@ jobs:
             jq --exit-status --arg name "$name" --arg commit "$COMMIT" '.skills[$name].commit == $commit' skills-lock.json
           done
           diff "$GITHUB_WORKSPACE/labels.yml" .github/labels.yml
+          diff "$GITHUB_WORKSPACE/WORKFLOW.md" WORKFLOW.md
           grep --quiet "skills-check.yml@$COMMIT # v9.9.9" .github/workflows/factory.yml

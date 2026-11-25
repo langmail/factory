@@ -1,8 +1,9 @@
 name: Factory copies
 
 # Called by every consumer: fails when a skill in skills-lock.json, or the
-# .github/labels.yml copy, differs from its pinned commit. See AGENTS.md (How
-# a change reaches the repos).
+# .github/labels.yml or WORKFLOW.md copy, differs from its pinned commit, or
+# when the root AGENTS.md lacks a Factory section entry that WORKFLOW.md
+# reads. See AGENTS.md (How a change reaches the repos).
 
 on:
   workflow_call:
@@ -28,14 +29,31 @@ jobs:
             rm -rf ".agents/skills/$name" ".claude/skills/$name"
           done
           npx --yes skills@1.9.0 experimental_install --frozen-lockfile --agent claude-code --agent codex
-      - name: Compare the labels with the pinned factory commit
+      - name: Compare the labels and WORKFLOW.md with the pinned factory commit
         run: |
           set -o pipefail
           commit=$(jq --raw-output '[.skills[] | select(.source == "langmail/factory") | .commit] | unique
             | if length == 1 then .[0] else error("skills-lock.json pins langmail/factory at \(length) commits") end' skills-lock.json)
-          curl --fail --silent --show-error "https://raw.githubusercontent.com/langmail/factory/$commit/labels.yml" \
-            | diff --unified - .github/labels.yml \
-            || { echo "::error::.github/labels.yml differs from langmail/factory $commit. Change labels in langmail/factory and take the sync PR."; exit 1; }
+          for pair in labels.yml:.github/labels.yml WORKFLOW.md:WORKFLOW.md; do
+            curl --fail --silent --show-error "https://raw.githubusercontent.com/langmail/factory/$commit/${pair%%:*}" \
+              | diff --unified - "${pair#*:}" \
+              || { echo "::error::${pair#*:} differs from langmail/factory $commit. Change it in langmail/factory and take the sync PR."; exit 1; }
+          done
+      - name: AGENTS.md has every Factory section entry WORKFLOW.md lists
+        run: |
+          # One section: from its heading to the next level-two heading, with
+          # line ends and trailing blanks ignored.
+          extract() { awk -v heading="$1" '{ sub(/[ \t\r]+$/, "") } /^## /{ on = ($0 == heading) } on' "$2"; }
+          section=$(extract "## Factory" AGENTS.md)
+          entries=$(extract "## The Factory section" WORKFLOW.md | grep --only-matching '^- \*\*[^*]*:\*\*' || true)
+          [ -n "$section" ] || { echo "::error::AGENTS.md has no ## Factory section (WORKFLOW.md, The Factory section)."; exit 1; }
+          [ -n "$entries" ] || { echo "::error::WORKFLOW.md lists no Factory section entries."; exit 1; }
+          missing=0
+          while IFS= read -r entry; do
+            awk -v entry="$entry" 'index($0, entry) == 1 { found = 1 } END { exit !found }' <<<"$section" \
+              || { echo "::error::The ## Factory section of AGENTS.md has no '$entry' entry (WORKFLOW.md, The Factory section)."; missing=1; }
+          done <<<"$entries"
+          exit "$missing"
       - name: Fail on any difference
         run: |
           if [ -n "$(git status --porcelain -- .agents .claude skills-lock.json)" ]; then

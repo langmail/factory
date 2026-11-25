@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Brings a consumer repo to a release: copies the skills install.mjs
 // installed, with their skills-lock.json entries and .claude/skills symlinks,
-// removes retired skills, copies labels.yml to .github/labels.yml, and pins
-// the repo's calls to this repo's reusable workflows to the release commit. Node built-ins only, because it runs in
-// the job that holds the sync App's token.
+// removes retired skills, copies labels.yml to .github/labels.yml and
+// WORKFLOW.md to the repo root, and pins the repo's calls to this repo's
+// reusable workflows to the release commit. Node built-ins only, because it
+// runs in the job that holds the sync App's token.
 //
 // Usage: node scripts/apply.mjs <installed dir> <consumer dir> <tag> <commit>
 
@@ -45,6 +46,7 @@ writeFileSync(join(target, "skills-lock.json"), `${JSON.stringify(lock, null, 2)
 
 mkdirSync(join(target, ".github"), { recursive: true });
 cpSync(new URL("../labels.yml", import.meta.url), join(target, ".github", "labels.yml"));
+cpSync(new URL("../WORKFLOW.md", import.meta.url), join(target, "WORKFLOW.md"));
 
 const workflows = join(target, ".github", "workflows");
 const call = /(langmail\/factory\/\.github\/workflows\/[\w.-]+\.ya?ml)@\S+( # \S+)?/g;
