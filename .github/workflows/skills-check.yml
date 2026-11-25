@@ -1,0 +1,37 @@
+name: Shared skills
+
+# Called by every consumer: fails when a skill in skills-lock.json differs
+# from its pinned commit. See AGENTS.md (How a change reaches the repos).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Copies match skills-lock.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Reinstall every pinned skill from scratch
+        # Deleting first makes a file added by hand show up as deleted.
+        run: |
+          for name in $(jq --raw-output '.skills | keys[]' skills-lock.json); do
+            rm -rf ".agents/skills/$name" ".claude/skills/$name"
+          done
+          npx --yes skills@1.9.0 experimental_install --frozen-lockfile --agent claude-code --agent codex
+      - name: Fail on any difference
+        run: |
+          if [ -n "$(git status --porcelain -- .agents .claude skills-lock.json)" ]; then
+            git status --short -- .agents .claude skills-lock.json
+            git diff -- .agents .claude skills-lock.json
+            echo "::error::A pinned skill differs from skills-lock.json. Change a shared skill in langmail/factory and take the sync PR; re-pin a repo's own third-party skill with the skills CLI."
+            exit 1
+          fi
