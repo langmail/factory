@@ -139,6 +139,12 @@ test("the review takes a fork's PR only on the claude-review label", () => {
   assert.match(target, /github\.event\.label\.name == 'claude-review'/);
   assert.match(target, /github\.event\.pull_request\.state == 'open'/);
   assert.match(review, /^ {10}allow_fork_prs: \$\{\{ github\.event_name == 'pull_request_target' \}\}$/m);
+  // The App's exchange refuses that run's OIDC token; the run's own token,
+  // never a stored one, takes its place there only.
+  assert.match(
+    review,
+    /^ {10}github_token: \$\{\{ github\.event_name == 'pull_request_target' && github\.token \|\| '' \}\}$/m,
+  );
   for (const [, options] of review.matchAll(/uses: actions\/checkout@\S+.*\n((?: {8}.*\n)*)/g)) {
     assert.doesNotMatch(options, /\bref:/, "a checkout names a ref");
   }
