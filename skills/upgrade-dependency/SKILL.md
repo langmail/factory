@@ -41,8 +41,7 @@ From the repository root, list the candidates:
 
 - **Majors Dependabot does not open:** the package manager's outdated list
   for every workspace, with the commands **Dependencies** names: a Latest
-  past the major of Current, which `dependabot.yml` ignores. For a `0.y`
-  package the next `0.y` is a major.
+  past the major of Current, which `dependabot.yml` ignores.
 - **Pinned and ignored:** a package pinned to an exact version that
   `dependabot.yml` ignores entirely. Dependabot proposes nothing for it, so
   any newer release, a patch included, is a candidate.
@@ -56,7 +55,7 @@ From the repository root, list the candidates:
   and each file where the Factory section's **Issues** says a defect in a
   dependency is recorded, says when it can drop. A hold whose condition is
   met is a candidate. A candidate held by one whose condition is not met is
-  not.
+  not. An `ignore` entry with no drop condition is a pin, not a hold.
 - Whatever else **Dependencies** lists, such as a runtime or a toolchain.
 
 Out of scope: what **Dependencies** leaves out.

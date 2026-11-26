@@ -294,4 +294,5 @@ apply says so in a few words.
 - **Release:** how a merged change goes live, and what a human still does.
 - **Dependencies:** the commands that list outdated packages, where the
   stack is listed, what else an upgrade covers (runtimes, toolchains,
-  images, pins) and what it leaves out (`upgrade-dependency` skill).
+  images, pins) with the files each is pinned in, and what it leaves out
+  (`upgrade-dependency` skill).

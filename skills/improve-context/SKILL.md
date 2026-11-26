@@ -37,11 +37,17 @@ these areas, numbered from 0:
 3. every other `AGENTS.md`;
 4. the shared copies, only when a clone of `langmail/factory` sits next to
    this repository (`../factory`): `WORKFLOW.md`, `.github/labels.yml` and the
-   skills `skills-lock.json` lists. They are copies, and CI fails on an edit
-   to them here, so a fix to one is made in that clone, follows its
-   `AGENTS.md` and goes to `langmail/factory` as its pull request. That
-   repository is public: nothing private to this one goes there. Without the
-   clone, leave the shared copies alone.
+   skills `skills-lock.json` pins to `langmail/factory`, except those the
+   clone's `factory.json` lists under `upstream`. They are copies, and CI
+   fails on an edit to them here, so a fix to one is made in that clone,
+   follows its `AGENTS.md` and goes to `langmail/factory` as its pull
+   request. That repository is public: nothing private to this one goes
+   there. Its experiment turns green in the clone, such as with a check in
+   its `scripts/*.test.mjs`. Without the clone, leave the shared copies
+   alone.
+
+Leave every other skill that `skills-lock.json` lists alone: its source is
+upstream.
 
 Code counts only where one of them makes a claim about it.
 
@@ -62,7 +68,8 @@ Look first at what changed since the previous run (`git log --since=<date>
 --name-only` on the context paths; the window is the interval of the
 `schedule` in `.agents/routines/improve-context.yml`, plus a day; run `git
 fetch --unshallow` first if the checkout is shallow), then at one area in
-rotation: `$(( 10#$(date -u +%j) % <number of areas> ))` picks it. Look for
+rotation: `$(( 10#$(date -u +%j) % 4 ))` picks it, or `% 5` with the
+factory clone. Look for
 a path, script or skill that does not exist; a port, env var, endpoint,
 version or count that the code contradicts; the same rule in two files
 (`WORKFLOW.md`, Rules); two files that disagree; content the code already
