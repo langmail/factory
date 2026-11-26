@@ -127,23 +127,24 @@ test("the review can't write, push or read the tokens", () => {
   }
 });
 
-// pull_request_target runs with the secrets, so a fork's PR is reviewed only
-// when a maintainer's label asks, the fork's code is never checked out by the
-// workflow, and the action allows forks only on that run.
-test("the review takes a fork's PR only on the claude-review label", () => {
+// issue_comment runs with the secrets, so a fork's PR is reviewed only when a
+// maintainer's /claude-review comment asks, the fork's code is never checked
+// out by the workflow, and only that run allows forks and gets the run's own
+// token in place of the App's, whose OIDC request token it never holds.
+test("the review takes a fork's PR only on a maintainer's /claude-review comment", () => {
   const review = read(".github/workflows/review.yml");
-  assert.ok(names.includes("claude-review"), "claude-review is not in labels.yml");
+  assert.ok(!review.includes("pull_request_target:"), "review.yml names pull_request_target as a trigger");
   const [, condition] = review.match(/^ {4}if: >-\n((?: {6}.*\n)+)/m);
-  const target = condition.split("||").find((part) => part.includes("pull_request_target"));
-  assert.match(target, /github\.event\.action == 'labeled'/);
-  assert.match(target, /github\.event\.label\.name == 'claude-review'/);
-  assert.match(target, /github\.event\.pull_request\.state == 'open'/);
-  assert.match(review, /^ {10}allow_fork_prs: \$\{\{ github\.event_name == 'pull_request_target' \}\}$/m);
-  // The App's exchange refuses that run's OIDC token; the run's own token,
-  // never a stored one, takes its place there only.
+  const comment = condition.split("||").find((part) => part.includes("issue_comment"));
+  assert.match(comment, /github\.event\.action == 'created'/);
+  assert.match(comment, /github\.event\.issue\.pull_request &&/);
+  assert.match(comment, /github\.event\.issue\.state == 'open'/);
+  assert.match(comment, /startsWith\(github\.event\.comment\.body, '\/claude-review'\)/);
+  assert.match(comment, /\["OWNER","MEMBER","COLLABORATOR"\]'\), github\.event\.comment\.author_association/);
+  assert.match(review, /^ {10}allow_fork_prs: \$\{\{ github\.event_name == 'issue_comment' \}\}$/m);
   assert.match(
     review,
-    /^ {10}github_token: \$\{\{ github\.event_name == 'pull_request_target' && github\.token \|\| '' \}\}$/m,
+    /^ {10}github_token: \$\{\{ github\.event_name == 'issue_comment' && github\.token \|\| '' \}\}$/m,
   );
   for (const [, options] of review.matchAll(/uses: actions\/checkout@\S+.*\n((?: {8}.*\n)*)/g)) {
     assert.doesNotMatch(options, /\bref:/, "a checkout names a ref");
