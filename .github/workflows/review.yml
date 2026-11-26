@@ -89,6 +89,12 @@ jobs:
           # Forks only on the label's run: a push from a fork never gets
           # here, and the action refuses forks unless told otherwise.
           allow_fork_prs: ${{ github.event_name == 'pull_request_target' }}
+          # The Claude App issues no token for a pull_request_target run (its
+          # exchange answers "Invalid OIDC token"), so on the label's run
+          # Claude acts with this run's GITHUB_TOKEN: the caller's
+          # permissions, gone when the job ends, posting as
+          # github-actions[bot]. Empty on pull_request: the App's token.
+          github_token: ${{ github.event_name == 'pull_request_target' && github.token || '' }}
           # The action owns a tracking comment that the review is posted into,
           # so the summary doesn't depend on a `gh pr comment` call that the
           # Bash permission matcher may deny.
