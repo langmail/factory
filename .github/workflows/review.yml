@@ -1,29 +1,29 @@
 name: Claude review
 
 # Called by each repo's claude-code-review.yml on pull_request (opened,
-# synchronize, ready_for_review, reopened), and on pull_request_target
-# (labeled) when a maintainer adds the claude-review label. Reviews the PR
-# with Claude in the format every repo's PR review loop reads; the repo's
-# REVIEW.md says what matters in that repo. The caller grants contents: read,
-# pull-requests: write, issues: write and id-token: write; Claude itself acts
-# with the Claude App's token, bound by the tool rules below.
+# synchronize, ready_for_review, reopened), and on issue_comment (created)
+# when a maintainer comments /claude-review on a PR. Reviews the PR with
+# Claude in the format every repo's PR review loop reads; the repo's
+# REVIEW.md says what matters in that repo. Claude acts with the token
+# described at github_token below, bound by the tool rules below.
 #
-# The label is how a PR from a fork gets a review: its pull_request runs get
-# no secrets and no OIDC token. pull_request_target runs this workflow as the
-# default branch has it, with the secrets, so the fork's code never runs:
-# the checkout below is the base, the action checks out the PR head itself
-# and, on a PR whose author lacks write access, takes Claude's config
-# (.claude/, CLAUDE.md, AGENTS.md, .mcp.json) from the default branch. The
-# action fails a run whose actor lacks write access, so only a maintainer's
-# label starts one; each label asks for one review and the run removes it.
-# The caller adds, next to its pull_request trigger:
+# The comment is how a PR from a fork gets a review: its pull_request runs
+# get no secrets and no OIDC token. An issue_comment run uses this workflow
+# as the default branch has it, with the secrets, so the fork's code never
+# runs: the checkout below is the base, the action checks out the PR head
+# itself, pinned to what it was when the comment was made, and on a PR whose
+# author lacks write access takes Claude's config (.claude/, CLAUDE.md,
+# AGENTS.md, .mcp.json) from the default branch. The action fails a run whose
+# commenter lacks write access. Each comment asks for one review.
+# (pull_request_target, the obvious trigger, is blocked by default in public
+# repos from 2026-12-02, and the Claude App issues no token for it.)
 #
-#   pull_request_target:
-#     types: [labeled]
+# The caller has two jobs calling this workflow: one on pull_request that
+# grants contents: read, pull-requests: write, issues: write and id-token:
+# write, and one on issue_comment that grants the same without id-token,
+# filtered so that other comments start no run:
 #
-# and on its job, so that other labels start no run:
-#
-#   if: github.event_name == 'pull_request' || github.event.label.name == 'claude-review'
+#   if: github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/claude-review')
 
 on:
   workflow_call:
@@ -39,33 +39,29 @@ jobs:
     # On a push, no review on drafts, where every push would buy one for code
     # still changing, on PRs from bots (Dependabot, the factory sync), whose
     # runs get no secrets or need no review, or on PRs from forks, which get
-    # no secrets or OIDC token. The claude-review label asks for one anyway.
+    # no secrets or OIDC token. A maintainer's /claude-review comment on an
+    # open PR asks for one anyway; the action checks the commenter's write
+    # access, which author_association only approximates.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.draft == false &&
        github.event.pull_request.user.type != 'Bot' &&
        github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'pull_request_target' &&
-       github.event.action == 'labeled' &&
-       github.event.label.name == 'claude-review' &&
-       github.event.pull_request.state == 'open')
+      (github.event_name == 'issue_comment' &&
+       github.event.action == 'created' &&
+       github.event.issue.pull_request &&
+       github.event.issue.state == 'open' &&
+       startsWith(github.event.comment.body, '/claude-review') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # One group per event, so a push and a label never cancel each other's
-    # review, and a fork's push can't cancel the review a label asked for.
+    # One group per event, so a push and a comment never cancel each other's
+    # review, and a fork's push can't cancel the review a comment asked for.
     concurrency:
-      group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number }}
+      group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: true
     steps:
-      # A label asks for one review; adding it again asks for another.
-      - name: Take the claude-review label off
-        if: github.event_name == 'pull_request_target'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/claude-review" --silent || true
-
-      # No ref: on pull_request_target this is the base branch, never the
+      # No ref: on issue_comment this is the default branch, never the
       # fork's code. The action checks out the PR head on its own terms.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,22 +82,22 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Forks only on the label's run: a push from a fork never gets
+          # Forks only on the comment's run: a push from a fork never gets
           # here, and the action refuses forks unless told otherwise.
-          allow_fork_prs: ${{ github.event_name == 'pull_request_target' }}
-          # The Claude App issues no token for a pull_request_target run (its
-          # exchange answers "Invalid OIDC token"), so on the label's run
-          # Claude acts with this run's GITHUB_TOKEN: the caller's
-          # permissions, gone when the job ends, posting as
-          # github-actions[bot]. Empty on pull_request: the App's token.
-          github_token: ${{ github.event_name == 'pull_request_target' && github.token || '' }}
+          allow_fork_prs: ${{ github.event_name == 'issue_comment' }}
+          # On the comment's run, which reads a fork's code and text, Claude
+          # acts with this run's GITHUB_TOKEN: the caller's permissions,
+          # without id-token, so no OIDC request token is in reach, and gone
+          # when the job ends. It posts as github-actions[bot]. Empty on
+          # pull_request: the Claude App's token, posting as claude[bot].
+          github_token: ${{ github.event_name == 'issue_comment' && github.token || '' }}
           # The action owns a tracking comment that the review is posted into,
           # so the summary doesn't depend on a `gh pr comment` call that the
           # Bash permission matcher may deny.
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
             Review this pull request for bugs and incorrect behavior. Use the
             repository's AGENTS.md and WORKFLOW.md for its conventions and
@@ -171,14 +167,14 @@ jobs:
         if: success() || failure()
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
           SINCE: ${{ steps.start.outputs.at }}
           CALLER: ${{ github.workflow_ref }}
         run: |
           # The action skips itself when the calling workflow differs from the
           # default branch's copy, so a PR that edits it gets no review: warn
-          # and pass. A pull_request_target run always uses the default
-          # branch's copy.
+          # and pass. An issue_comment run always uses the default branch's
+          # copy.
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             workflow=${CALLER#"$GITHUB_REPOSITORY/"}
             workflow=${workflow%%@*}
