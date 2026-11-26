@@ -127,6 +127,23 @@ test("the review can't write, push or read the tokens", () => {
   }
 });
 
+// pull_request_target runs with the secrets, so a fork's PR is reviewed only
+// when a maintainer's label asks, the fork's code is never checked out by the
+// workflow, and the action allows forks only on that run.
+test("the review takes a fork's PR only on the claude-review label", () => {
+  const review = read(".github/workflows/review.yml");
+  assert.ok(names.includes("claude-review"), "claude-review is not in labels.yml");
+  const [, condition] = review.match(/^ {4}if: >-\n((?: {6}.*\n)+)/m);
+  const target = condition.split("||").find((part) => part.includes("pull_request_target"));
+  assert.match(target, /github\.event\.action == 'labeled'/);
+  assert.match(target, /github\.event\.label\.name == 'claude-review'/);
+  assert.match(target, /github\.event\.pull_request\.state == 'open'/);
+  assert.match(review, /^ {10}allow_fork_prs: \$\{\{ github\.event_name == 'pull_request_target' \}\}$/m);
+  for (const [, options] of review.matchAll(/uses: actions\/checkout@\S+.*\n((?: {8}.*\n)*)/g)) {
+    assert.doesNotMatch(options, /\bref:/, "a checkout names a ref");
+  }
+});
+
 // Consumers run these workflows with their own secrets, so an action may move
 // only when a factory PR moves it. claude-code-action is the exception: its
 // releases bring the Claude Code version that newer models need.
