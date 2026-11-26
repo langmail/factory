@@ -38,9 +38,10 @@ message names the issue), take that issue as if given its number, and only
 when it passes the queue checks below (open, unassigned, no open PR closes
 it, no open issue blocks it); otherwise stop without a comment or change, and
 don't pick another issue, since the scheduled run works the queue. When the
-event closed the issue, take instead the first of the issues it was blocking
-that is `ready-for-agent` and passes those checks, in the queue's order
-below, so an unblocked issue doesn't wait for the next scheduled run:
+event closed the issue as completed (its `state_reason` is `completed`; on
+any other close, stop as above), take instead the first of the issues it was
+blocking that is `ready-for-agent` and passes those checks, in the queue's
+order below, so an unblocked issue doesn't wait for the next scheduled run:
 
 ```bash
 gh api repos/<owner>/<repo>/issues/<N>/dependencies/blocking --jq '.[]
